@@ -1,6 +1,8 @@
 %w(survey survey_translation survey_section question_group question dependency dependency_condition answer validation validation_condition).each {|model| require model }
 
 require 'yaml'
+require 'lunokhod'
+require_relative 'surveyor_backend'
 
 module Surveyor
   class ParserError < StandardError; end
@@ -12,7 +14,18 @@ module Surveyor
 
     # Class methods
     def self.parse_file(filename, options={})
-      self.parse(File.read(filename),{:filename => filename}.merge(options))
+      #self.parse(File.read(filename),{:filename => filename}.merge(options))
+      data = File.read(filename)
+      p  = Lunokhod::Parser.new(data, filename);p.parse
+      r  = Lunokhod::Resolver.new(p.surveys).tap{|r|r.run}
+      ep = Lunokhod::ErrorReport.new(p.surveys).tap{|ep|ep.run}
+      raise Surveyor::ParserError, ep if ep.errors?
+      b = Surveyor::Backend.new(options[:filename].nil? ? Dir.pwd : File.dirname(options[:filename]))
+      Lunokhod::Compiler.new(p.surveys, b).compile
+      puts b.write
+      puts b.surveys.map(&:valid?)
+      puts b.surveys.map{|s|s.errors.full_messages}
+      puts b.surveys.map{|s|s.sections.map{|se|se.questions.map{|q|q.errors.full_messages.inspect}}}
     end
     def self.parse(str, options={})
       self.ensure_attrs
