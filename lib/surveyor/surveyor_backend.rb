@@ -24,9 +24,8 @@ module Surveyor::CompilerChecks
   end
 
   #put this somewhere else
-  def dependency_association(n,scope)
-    return :question if [Lunokhod::AST::Question, Lunokhod::AST::Label].any?{|k|n.parent.is_a?(k)}
-    return :question_group if [Lunokhod::AST::Group, Lunokhod::AST::Repeater, Lunokhod::AST::Grid].any?{|k|n.parent.is_a?(k)}
+  def translate(n)
+    n.class.name.gsub(/^.*::/,'').downcase.to_sym
   end
 end
 
@@ -36,6 +35,7 @@ module Surveyor
     attr_accessor :level
     attr_accessor :surveys
     attr_accessor :dir
+    attr_accessor :default_mandatory
 
 
     def initialize(dir) # see parser.rb#200
@@ -55,6 +55,7 @@ module Surveyor
     end
 
     def survey(n)
+      @default_mandatory = n.options.delete(:default_mandatory){false}
       @scope[:survey] = Survey.new({:title => n.name}.merge(n.options))
       yield
       @surveys << @scope.delete(:survey)
@@ -102,18 +103,19 @@ module Surveyor
       @scope.delete(:repeater)
     end
 
+    #Lunokhod::AST::Grid does not have options?
     def grid(n)
       group_repeater_grid(@scope)
       @scope[:grid] = QuestionGroup.new({
-        :text => n.name,
+        :text => n.text,
         :display_type => 'grid'
-      }.merge(n.options))
+      })
       yield
       @scope.delete(:grid)
     end
 
     def label(n)
-      @scope[:section].questions << @scope[:labe] = Question.new({
+      @scope[:section].questions << @scope[:label] = Question.new({
         :survey_section => @scope[:section],
         :question_group => group_repeater_grid(@scope),
         :text           => n.text,
@@ -121,7 +123,7 @@ module Surveyor
         :display_order  => @scope[:section].questions.size
       }.merge(n.options))
       yield
-      @scope.delete(:labe)
+      @scope.delete(:label)
     end
 
     def question(n)
@@ -130,7 +132,8 @@ module Surveyor
         :question_group => group_repeater_grid(@scope),
         :text           => n.text,
         :display_type   => 'default',
-        :display_order  => @scope[:section].questions.size
+        :display_order  => @scope[:section].questions.size,
+        :is_mandatory   => @default_mandatory
       }.merge(n.options))
       yield
       @scope.delete(:question)
@@ -152,17 +155,49 @@ module Surveyor
 
     #questions don't have children as groups, thus scope will be empty
     def dependency(n)
-      parent = dependency_association
-      #@scope[(parent==:question)? ].dependency << @scope[:dependency] =
+      p = translate(n.parent)
+      @scope[p].dependency = @scope[:dependency] = Dependency.new({
+        :question => [:question, :label].include?(p) ? @scope[p] : nil,
+        :question_group => [:group, :repeater, :grid].include?(p) ? @scope[p] : nil,
+        :rule => n.rule
+      })
       yield
+      @scope.delete(:dependency)
     end
 
     def validation(n)
+      @scope[:answer].validations << @scope[:validation] = Validation.new({
+        :answer => @scope[:answer],
+        :rule => n.rule
+      })
+      yield
+      @scope.delete(:validation)
+    end
+
+
+    # TODO: should we default :operator to "=="? (see parser.rb:348)
+    def condition(n)
+      p = translate(n.parent)
+      type = {:dependency => DependencyCondition, :validation => ValidationCondition}[p]
+      debugger if type.nil?
+      @scope[p].send("#{p}_conditions") << type.new({
+        :rule_key => n.tag
+      }.merge(condition_h(n)))
       yield
     end
 
-    def condition(n)
-      yield
+    def condition_h(n)
+      case n.parsed_condition
+        when Lunokhod::ConditionParsing::AnswerSelected
+        {:question_reference => n.qtag, :operator => n.parsed_condition.op, :answer_reference => n.atag}
+        when Lunokhod::ConditionParsing::AnswerCount
+        {:question_reference => n.qtag, :operator => 'count'+n.parsed_condition.op+n.parsed_condition.value.to_s}
+        when Lunokhod::ConditionParsing::AnswerSatisfies
+        {:question_reference => n.qtag, :operator => n.parsed_condition.op, n.parsed_condition.criterion => n.parsed_condition.value, :answer_reference => n.aref}
+        when Lunokhod::ConditionParsing::SelfAnswerSatisfies
+        {:operator => n.parsed_condition.op, n.parsed_condition.criterion => n.parsed_condition.value}
+      end
     end
+
   end
 end
