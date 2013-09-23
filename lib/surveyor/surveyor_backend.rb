@@ -42,6 +42,7 @@ module Surveyor
       @dir = dir
       @surveys = []
       @scope = {}
+      @grid_answers = []
     end
 
     def write
@@ -93,12 +94,13 @@ module Surveyor
     end
 
     #see parser.rb#245 regarding :display_type
+    #TODO: repeater does not have options?
     def repeater(n)
       group_repeater_grid(@scope)
       @scope[:repeater] = QuestionGroup.new({
-        :text => n.name,
+        :text => n.text,
         :display_type => 'repeater'
-      }.merge(n.options))
+      })
       yield
       @scope.delete(:repeater)
     end
@@ -111,6 +113,14 @@ module Surveyor
         :display_type => 'grid'
       })
       yield
+
+      @scope[:grid].questions.each do |q|
+        @grid_answers.each do |a|
+          q.answers.build(a.attributes.reject{|k,v| %w(id api_id created_at updated_at).include?(k)})
+        end
+      end
+
+      @grid_answers = []
       @scope.delete(:grid)
     end
 
@@ -141,14 +151,24 @@ module Surveyor
 
     #TODO see parser.rb#parse_args
     #TODO handle grids
-    #TODO handle :other,:other_and_string,:none,:omit
+    #TODO handle :other_and_string
     def answer(n)
-      @scope[:question].answers << @scope[:answer] = Answer.new({
-        :question      => @scope[:question],
-        :display_order => @scope[:question].answers.size,
-        :text => n.text || 'Answer',
-        :response_class => n.type
+      @scope[:answer] = Answer.new({
+        :text => answer_text(n),
+        :response_class => n.type,
+        :is_exclusive => answer_is_exclusive(n)
       }.merge(n.options))
+
+      case translate(n.parent)
+      when :grid
+        @scope[:answer].display_order = @grid_answers.size
+        @grid_answers << @scope[:answer]
+      when :question
+        @scope[:answer].display_order = @scope[:question].answers.size
+        @scope[:answer].question = @scope[:question]
+        @scope[:question].answers << @scope[:answer]
+      end
+
       yield
       @scope.delete(:answer)
     end
@@ -197,6 +217,19 @@ module Surveyor
         when Lunokhod::ConditionParsing::SelfAnswerSatisfies
         {:operator => n.parsed_condition.op, n.parsed_condition.criterion => n.parsed_condition.value}
       end
+    end
+
+    #TODO: fix lunokhod handling of "a :other"? maybe better to just depreicate :other
+    #TODO: possibly get rid of :none and :omit
+    def answer_text(n)
+      return n.text if n.text
+      return 'Other' if n.other || n.type == :other
+      return n.type.to_s.humanize if [:none, :omit].include?(n.type)
+      return 'Answer'
+    end
+
+    def answer_is_exclusive(n)
+      return [:none, :omit].include?(n.type)
     end
 
   end
