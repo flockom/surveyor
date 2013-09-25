@@ -43,6 +43,7 @@ module Surveyor
       @surveys = []
       @scope = {}
       @grid_answers = []
+      @resolve_map = {}
     end
 
     def write
@@ -52,7 +53,14 @@ module Surveyor
     def prologue
     end
 
+    #TODO: support ValidationConditions (when they work in surveyor)
     def epilogue
+      @resolve_map
+        .select{ |_,v| v.is_a?(DependencyCondition)}
+        .each do |(lunokhod_node, ar_node)|
+        ar_node.question = @resolve_map[lunokhod_node.referenced_question]
+        ar_node.answer = @resolve_map[lunokhod_node.referenced_answer]
+      end
     end
 
     def survey(n)
@@ -145,6 +153,7 @@ module Surveyor
         :display_order  => @scope[:section].questions.size,
         :is_mandatory   => @default_mandatory
       }.merge(n.options))
+      @resolve_map[n] = @scope[:question]
       yield
       @scope.delete(:question)
     end
@@ -168,7 +177,7 @@ module Surveyor
         @scope[:answer].question = @scope[:question]
         @scope[:question].answers << @scope[:answer]
       end
-
+      @resolve_map[n] = @scope[:answer]
       yield
       @scope.delete(:answer)
     end
@@ -199,10 +208,10 @@ module Surveyor
     def condition(n)
       p = translate(n.parent)
       type = {:dependency => DependencyCondition, :validation => ValidationCondition}[p]
-      debugger if type.nil?
       @scope[p].send("#{p}_conditions") << type.new({
         :rule_key => n.tag
       }.merge(condition_h(n)))
+       .tap{|r| @resolve_map[n] = r}
       yield
     end
 
