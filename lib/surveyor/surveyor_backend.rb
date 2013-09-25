@@ -218,11 +218,11 @@ module Surveyor
     def condition_h(n)
       case n.parsed_condition
         when Lunokhod::ConditionParsing::AnswerSelected
-        {:question_reference => n.qtag, :operator => n.parsed_condition.op, :answer_reference => n.atag}
+        {:operator => n.parsed_condition.op}
         when Lunokhod::ConditionParsing::AnswerCount
-        {:question_reference => n.qtag, :operator => 'count'+n.parsed_condition.op+n.parsed_condition.value.to_s}
+        {:operator => 'count'+n.parsed_condition.op+n.parsed_condition.value.to_s}
         when Lunokhod::ConditionParsing::AnswerSatisfies
-        {:question_reference => n.qtag, :operator => n.parsed_condition.op, n.parsed_condition.criterion => n.parsed_condition.value, :answer_reference => n.aref}
+        {:operator => n.parsed_condition.op, n.parsed_condition.criterion => n.parsed_condition.value}
         when Lunokhod::ConditionParsing::SelfAnswerSatisfies
         {:operator => n.parsed_condition.op, n.parsed_condition.criterion => n.parsed_condition.value}
       end
