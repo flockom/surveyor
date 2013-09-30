@@ -2,7 +2,8 @@
 
 require 'yaml'
 
-# TODO we should probobly use surveyor_tag in here somewhere
+# TODO we should probobly use surveyor_tag in here somewhere. make it explicit what :reference_identifier will be.
+#      add reference identifier on everything that needs it.
 # TODO error reporting for unexpected scopes? certian situations where surveyor is limited but the AST is not
 #      e.g. nested groups, dependencies in repeaters, etc
 # TODO go through parser and check for any default values
@@ -10,6 +11,7 @@ require 'yaml'
 # TODO unify groups/repeaters/grids ?
 # TODO check all cases against parse_and_build methods in parser.rb
 # TODO replace << with build
+# TODO surveyor sets data_export_identifier from the text somewhere
 module Surveyor::CompilerChecks
   #TODO do we really want this together? probobly just combine them to one hash point
   def group_repeater_grid(scope)
@@ -43,7 +45,7 @@ module Surveyor
       @surveys = []
       @scope = {}
       @grid_answers = []
-      @resolve_map = {}
+      @resolve_map = {}.tap{|h|h.compare_by_identity}
     end
 
     def write
@@ -151,7 +153,8 @@ module Surveyor
         :text           => n.text,
         :display_type   => 'default',
         :display_order  => @scope[:section].questions.size,
-        :is_mandatory   => @default_mandatory
+        :is_mandatory   => @default_mandatory,
+        :reference_identifier => n.tag
       }.merge(n.options))
       @resolve_map[n] = @scope[:question]
       yield
