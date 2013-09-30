@@ -31,9 +31,17 @@ module Surveyor::CompilerChecks
   end
 end
 
+# TODO: could do this somewhat automatically for all nodes
+module Lunokhod::Ast::AstNode
+  attr_accessor :ar_node
+end
+
+
 module Surveyor
   class Backend
+    include Lunokhod::Visitation
     include Surveyor::CompilerChecks
+
     attr_accessor :level
     attr_accessor :surveys
     attr_accessor :dir
@@ -45,11 +53,10 @@ module Surveyor
       @surveys = []
       @scope = {}
       @grid_answers = []
-      @resolve_map = {}.tap{|h|h.compare_by_identity}
     end
 
     def write
-      @surveys.map(&:save)
+      @surveys.map(&:ar_node).each(&:save)
     end
 
     def prologue
@@ -57,19 +64,23 @@ module Surveyor
 
     #TODO: support ValidationConditions (when they work in surveyor)
     def epilogue
-      @resolve_map
-        .select{ |_,v| v.is_a?(DependencyCondition)}
-        .each do |(lunokhod_node, ar_node)|
-        ar_node.question = @resolve_map[lunokhod_node.referenced_question]
-        ar_node.answer = @resolve_map[lunokhod_node.referenced_answer]
+      @surveys.each do |s|
+        visit(s, true) do |n, _, _, _|
+          if n.is_a?(Lunokhod::Ast::DependencyCondition)
+            n.ar_node.question = n.referenced_question.ar_node
+            n.ar_node.answer   = n.referenced_answer.try(:ar_node)
+          end
+        end
       end
     end
 
     def survey(n)
       @default_mandatory = n.options.delete(:default_mandatory){false}
       @scope[:survey] = Survey.new({:title => n.name}.merge(n.options))
+      n.ar_node = @scope[:survey]
       yield
-      @surveys << @scope.delete(:survey)
+      @scope.delete(:survey)
+      @surveys << n
     end
 
     # TODO: support inline translations in lunokhod
@@ -156,7 +167,7 @@ module Surveyor
         :is_mandatory   => @default_mandatory,
         :reference_identifier => n.tag
       }.merge(n.options))
-      @resolve_map[n] = @scope[:question]
+      n.ar_node =  @scope[:question]
       yield
       @scope.delete(:question)
     end
@@ -180,7 +191,7 @@ module Surveyor
         @scope[:answer].question = @scope[:question]
         @scope[:question].answers << @scope[:answer]
       end
-      @resolve_map[n] = @scope[:answer]
+      n.ar_node = @scope[:answer]
       yield
       @scope.delete(:answer)
     end
@@ -212,9 +223,10 @@ module Surveyor
       p = translate(n.parent)
       type = {:dependency => DependencyCondition, :validation => ValidationCondition}[p]
       @scope[p].send("#{p}_conditions") << type.new({
-        :rule_key => n.tag
+        :rule_key => n.tag,
+        p         => @scope[p]
       }.merge(condition_h(n)))
-       .tap{|r| @resolve_map[n] = r}
+       .tap{|r| n.ar_node = r}
       yield
     end
 
@@ -243,6 +255,5 @@ module Surveyor
     def answer_is_exclusive(n)
       return [:none, :omit].include?(n.type)
     end
-
   end
 end
