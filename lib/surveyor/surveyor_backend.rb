@@ -52,7 +52,6 @@ module Surveyor
       @dir = dir
       @surveys = []
       @scope = {}
-      @grid_answers = []
     end
 
     def write
@@ -135,13 +134,12 @@ module Surveyor
       })
       yield
 
-      @scope[:grid].questions.each do |q|
-        @grid_answers.each do |a|
-          q.answers.build(a.attributes.reject{|k,v| %w(id api_id created_at updated_at).include?(k)})
+      n.questions.each do |q|
+        n.answers.each do |a|
+          q.ar_node.answers.build(a.ar_node.attributes.reject{|k,v| %w(id api_id created_at updated_at).include?(k)})
         end
       end
 
-      @grid_answers = []
       @scope.delete(:grid)
     end
 
@@ -157,6 +155,7 @@ module Surveyor
       @scope.delete(:label)
     end
 
+    #TODO questions are not getting added to the questiongroup
     def question(n)
       @scope[:section].questions << @scope[:question] = Question.new({
         :survey_section => @scope[:section],
@@ -184,8 +183,7 @@ module Surveyor
 
       case translate(n.parent)
       when :grid
-        @scope[:answer].display_order = @grid_answers.size
-        @grid_answers << @scope[:answer]
+        @scope[:answer].display_order = n.parent.answers.index(n) #TODO: write spec in lunokhod for ordering
       when :question
         @scope[:answer].display_order = @scope[:question].answers.size
         @scope[:answer].question = @scope[:question]
