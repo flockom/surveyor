@@ -149,7 +149,8 @@ module Surveyor
         :question_group => group_repeater_grid(@scope),
         :text           => n.text,
         :display_type   => 'label',
-        :display_order  => @scope[:section].questions.size
+        :display_order  => @scope[:section].questions.size,
+        :reference_identifier => n.tag
       }.merge(n.options))
       yield
       @scope.delete(:label)
@@ -178,7 +179,8 @@ module Surveyor
       @scope[:answer] = Answer.new({
         :text => answer_text(n),
         :response_class => n.type,
-        :is_exclusive => answer_is_exclusive(n)
+        :is_exclusive => answer_is_exclusive(n),
+        :reference_identifier => n.tag
       }.merge(n.options))
 
       case translate(n.parent)
