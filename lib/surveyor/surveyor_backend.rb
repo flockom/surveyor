@@ -75,7 +75,10 @@ module Surveyor
 
     def survey(n)
       @default_mandatory = n.options.delete(:default_mandatory){false}
-      @scope[:survey] = Survey.new({:title => n.name}.merge(n.options))
+      @scope[:survey] = Survey.new({
+        :title => n.name,
+        :display_order => @surveys.size
+      }.merge(n.options))
       n.ar_node = @scope[:survey]
       yield
       @scope.delete(:survey)
@@ -96,7 +99,8 @@ module Surveyor
       @scope[:survey].sections  << @scope[:section] = SurveySection.new({
         :survey => @scope[:survey],
         :title => n.name,
-        :display_order => @scope[:survey].sections.size
+        :display_order => @scope[:survey].sections.size,
+        :reference_identifier => n.tag
       }.merge(n.options))
       yield
       @scope.delete(:section)
@@ -107,7 +111,8 @@ module Surveyor
       group_repeater_grid(@scope)
       @scope[:group] = QuestionGroup.new({
         :text => n.name,
-        :display_type => 'default'
+        :display_type => 'default',
+        :reference_identifier => n.tag
       }.merge(n.options))
       yield
       @scope.delete(:group)
@@ -119,7 +124,8 @@ module Surveyor
       group_repeater_grid(@scope)
       @scope[:repeater] = QuestionGroup.new({
         :text => n.text,
-        :display_type => 'repeater'
+        :display_type => 'repeater',
+        :reference_identifier => n.tag
       })
       yield
       @scope.delete(:repeater)
@@ -130,7 +136,8 @@ module Surveyor
       group_repeater_grid(@scope)
       @scope[:grid] = QuestionGroup.new({
         :text => n.text,
-        :display_type => 'grid'
+        :display_type => 'grid',
+        :reference_identifier => n.tag
       })
       yield
 
