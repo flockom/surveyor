@@ -12,6 +12,11 @@ require 'yaml'
 # TODO check all cases against parse_and_build methods in parser.rb
 # TODO replace << with build
 # TODO surveyor sets data_export_identifier from the text somewhere
+# TODO replace display_order with n.qseq
+# TODO custom hash builder for CommonOptions instead of merge? w/ making every option explicit
+# TODO  in lunokhod: nodes without tags should have n.tag == nil instead of n.tag == ""
+# TODO does :display_order really need to be explicitly specifiable?
+# TODO attempt to eliminate @scope usage via the ar_node connections
 module Surveyor::CompilerChecks
   #TODO do we really want this together? probobly just combine them to one hash point
   def group_repeater_grid(scope)
@@ -100,7 +105,7 @@ module Surveyor
         :survey => @scope[:survey],
         :title => n.name,
         :display_order => @scope[:survey].sections.size,
-        :reference_identifier => n.tag
+        :reference_identifier => n.tag.blank? ? nil : n.tag
       }.merge(n.options))
       yield
       @scope.delete(:section)
@@ -112,7 +117,7 @@ module Surveyor
       @scope[:group] = QuestionGroup.new({
         :text => n.name,
         :display_type => 'default',
-        :reference_identifier => n.tag
+        :reference_identifier => n.tag.blank? ? nil : n.tag
       }.merge(n.options))
       yield
       @scope.delete(:group)
@@ -125,7 +130,7 @@ module Surveyor
       @scope[:repeater] = QuestionGroup.new({
         :text => n.text,
         :display_type => 'repeater',
-        :reference_identifier => n.tag
+        :reference_identifier => n.tag.blank? ? nil : n.tag
       })
       yield
       @scope.delete(:repeater)
@@ -137,7 +142,7 @@ module Surveyor
       @scope[:grid] = QuestionGroup.new({
         :text => n.text,
         :display_type => 'grid',
-        :reference_identifier => n.tag
+        :reference_identifier => n.tag.blank? ? nil : n.tag
       })
       yield
 
@@ -157,22 +162,22 @@ module Surveyor
         :text           => n.text,
         :display_type   => 'label',
         :display_order  => @scope[:section].questions.size,
-        :reference_identifier => n.tag
+        #:pick => 'none',
+        :reference_identifier => n.tag.blank? ? nil : n.tag
       }.merge(n.options))
       yield
       @scope.delete(:label)
     end
 
-    #TODO questions are not getting added to the questiongroup
     def question(n)
       @scope[:section].questions << @scope[:question] = Question.new({
         :survey_section => @scope[:section],
         :question_group => group_repeater_grid(@scope),
         :text           => n.text,
-        :display_type   => 'default',
+        # :display_type   => 'default',
         :display_order  => @scope[:section].questions.size,
         :is_mandatory   => @default_mandatory,
-        :reference_identifier => n.tag
+        :reference_identifier => n.tag.blank? ? nil : n.tag
       }.merge(n.options))
       n.ar_node =  @scope[:question]
       yield
@@ -180,24 +185,21 @@ module Surveyor
     end
 
     #TODO see parser.rb#parse_args
-    #TODO handle grids
-    #TODO handle :other_and_string
+    #TODO handle :other_and_string? or depricate it
     def answer(n)
       @scope[:answer] = Answer.new({
         :text => answer_text(n),
-        :response_class => n.type,
+        :response_class => answer_response_class(n),
         :is_exclusive => answer_is_exclusive(n),
-        :reference_identifier => n.tag
+        :reference_identifier => n.tag.blank? ? nil : n.tag,
+        :display_order => answer_display_order(n)
       }.merge(n.options))
 
-      case translate(n.parent)
-      when :grid
-        @scope[:answer].display_order = n.parent.answers.index(n) #TODO: write spec in lunokhod for ordering
-      when :question
-        @scope[:answer].display_order = @scope[:question].answers.size
+      if translate(n.parent) == :question
         @scope[:answer].question = @scope[:question]
         @scope[:question].answers << @scope[:answer]
       end
+
       n.ar_node = @scope[:answer]
       yield
       @scope.delete(:answer)
@@ -250,7 +252,7 @@ module Surveyor
       end
     end
 
-    #TODO: fix lunokhod handling of "a :other"? maybe better to just depreicate :other
+    #TODO: fix lunokhod handling of "a :other" or "a :omit"? maybe better to just depreicate them
     #TODO: possibly get rid of :none and :omit
     def answer_text(n)
       return n.text if n.text
@@ -261,6 +263,26 @@ module Surveyor
 
     def answer_is_exclusive(n)
       return [:none, :omit].include?(n.type)
+    end
+
+    #TODO: this can possibly be cleaned up when n.type is adjusted
+    def answer_response_class(n)
+      if [:date, :datetime, :time, :float, :integer, :string, :text].include? n.type
+        n.type
+      else
+        :answer
+      end
+    end
+
+    #TODO lunokhod should figure this out and put it in seq?
+    def answer_display_order(n)
+      return  n.options[:display_order] if !n.options[:display_order].nil?
+      case translate(n.parent)
+      when :grid
+        n.parent.answers.index(n) #TODO: write spec in lunokhod for ordering
+      when :question
+        @scope[:question].answers.size
+      end
     end
   end
 end

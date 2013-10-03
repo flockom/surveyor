@@ -7,6 +7,8 @@ require_relative 'surveyor_backend'
 module Surveyor
   class ParserError < StandardError; end
   class Parser
+
+    # TODO: do something with logging, exceptions, options, etc.
     class << self; attr_accessor :options, :log end
 
     # Attributes
